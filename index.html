@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cleaner Photo Uploader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#0b0f14; --card:#111826; --ink:#e6edf3; --muted:#9aa4b2; --accent:#22c55e; --danger:#ef4444; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);}
+    .wrap{max-width:760px;margin:0 auto;padding:16px}
+    .card{background:var(--card);border:1px solid #1f2937;border-radius:16px;padding:16px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    h1{font-size:1.25rem;margin:0 0 8px}
+    p{margin:.25rem 0;color:var(--muted)}
+    label{display:block;font-size:.9rem;margin:12px 0 6px;color:#c7d2fe}
+    select,input[type="date"],textarea{width:100%;padding:12px;border:1px solid #263040;border-radius:12px;background:#0c1420;color:var(--ink)}
+    textarea{min-height:84px;resize:vertical}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media (max-width:560px){.row{grid-template-columns:1fr}}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;border:1px dashed #334155;background:#0c1420;color:var(--muted)}
+    .btn{width:100%;padding:14px 16px;border-radius:12px;border:none;font-weight:600}
+    .primary{background:var(--accent);color:#052e13}
+    .danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+    .files{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:12px}
+    .thumb{position:relative;border-radius:12px;overflow:hidden;border:1px solid #243041;background:#0c1420}
+    .thumb img{display:block;width:100%;height:100%;object-fit:cover}
+    .prog{position:absolute;left:0;bottom:0;height:6px;background:linear-gradient(90deg,var(--accent),#16a34a);width:0%}
+    .status{font-size:.85rem;margin-top:10px;color:var(--muted)}
+    .hidden{display:none}
+    .success{color:#22c55e}
+    .error{color:#ef4444}
+    .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .brand{font-weight:700;letter-spacing:.2px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">🧹 STR Cleaner Uploader</div>
+      <div id="authState" class="pill">Sign In</div>
+    </div>
+
+    <div class="card">
+      <h1>Upload Photos</h1>
+      <p>Choose a property and date, add any notes, then select multiple photos. Tap <b>Upload</b> and leave this page open until all photos finish.</p>
+
+      <label for="property">Property</label>
+      <select id="property">
+        <!-- Replace with your actual property IDs & names -->
+        <option value="prop-101"> Street Name or Nickname </option>
+        <option value="prop-102"> </option>
+        <option value="prop-103">Coler Cabin</option>
+      </select>
+
+      <div class="row">
+        <div>
+          <label for="date">Date</label>
+          <input type="date" id="date" />
+        </div>
+        <div>
+          <label for="uploaderName">Your name (will not be seen by owner)</label>
+          <input id="uploaderName" placeholder="e.g., Sam"/>
+        </div>
+      </div>
+
+      <label class="pill" style="justify-content:space-between">
+        <span>⚠️  Check if reporting damage</span>
+        <input id="damageFlag" type="checkbox" />
+      </label>
+
+      <label for="damageNotes">Notes (include damage description and/or any items that need to be purchased)</label>
+      <textarea id="damageNotes" placeholder="Broken lamp in master, stain on rug, etc."></textarea>
+
+      <label for="files">Photos</label>
+      <input id="files" type="file" accept="image/*" multiple />
+      <div id="previews" class="files"></div>
+
+      <div class="row" style="margin-top:14px">
+        <button id="uploadBtn" class="btn primary">Upload</button>
+        <button id="resetBtn" class="btn danger" type="button">Reset</button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+
+  <!-- Firebase v10+ Modular SDK from CDN -->
+  <script type="module">
+    // --- 1) Firebase SDK imports ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js";
+
+    // --- 2) TODO: Replace with your app's Firebase project configuration ---
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // --- 3) Init ---
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    const authStateEl = document.getElementById('authState');
+    const propertyEl = document.getElementById('property');
+    const dateEl = document.getElementById('date');
+    const filesEl = document.getElementById('files');
+    const previewsEl = document.getElementById('previews');
+    const statusEl = document.getElementById('status');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const damageFlagEl = document.getElementById('damageFlag');
+    const damageNotesEl = document.getElementById('damageNotes');
+    const uploaderNameEl = document.getElementById('uploaderName');
+
+    // Default date = today
+    const today = new Date();
+    dateEl.valueAsDate = today;
+
+    // --- 4) Anonymous sign-in for cleaners (no friction) ---
+    signInAnonymously(auth).catch((e)=>{
+      console.error(e); statusEl.textContent = `Auth error: ${e.message}`;
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        authStateEl.textContent = `Signed in as ${user.uid.slice(0,8)}… (anonymous)`;
+        authStateEl.style.color = '#a7f3d0';
+      } else {
+        authStateEl.textContent = 'Not signed in';
+        authStateEl.style.color = '';
+      }
+    });
+
+    // --- 5) Show previews ---
+    filesEl.addEventListener('change', () => {
+      previewsEl.innerHTML = '';
+      [...filesEl.files].forEach((file, idx) => {
+        const url = URL.createObjectURL(file);
+        const box = document.createElement('div');
+        box.className = 'thumb';
+        box.innerHTML = `<img src="${url}" alt="preview ${idx}"><div class="prog" id="prog-${idx}"></div>`;
+        previewsEl.appendChild(box);
+      });
+      statusEl.textContent = filesEl.files.length ? `${filesEl.files.length} photo(s) ready` : '';
+    });
+
+    // --- 6) Helper: path components ---
+    function pad2(n){ return n.toString().padStart(2,'0'); }
+    function dateParts(d){
+      const y = d.getFullYear();
+      const m = pad2(d.getMonth()+1);
+      const day = pad2(d.getDate());
+      return {y,m,day};
+    }
+
+    // --- 7) Upload handler ---
+    uploadBtn.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user) { statusEl.textContent = 'Please wait for sign-in…'; return; }
+      const uid = user.uid;
+      const prop = propertyEl.value;
+      const d = dateEl.value ? new Date(dateEl.value) : new Date();
+      const {y,m,day} = dateParts(d);
+      const isDamage = !!damageFlagEl.checked;
+      const damageNotes = (damageNotesEl.value || '').trim();
+      const uploaderName = (uploaderNameEl.value || '').trim();
+
+      const files = [...filesEl.files];
+      if (!files.length){ statusEl.textContent = 'Select at least one photo.'; return; }
+
+      uploadBtn.disabled = true; resetBtn.disabled = true;
+      statusEl.textContent = 'Uploading… Please keep this page open.';
+
+      let ok = 0, fail = 0;
+
+      for (let i=0;i<files.length;i++){
+        const f = files[i];
+        const ts = Date.now();
+        const cleanName = f.name.replace(/[^a-zA-Z0-9_.-]/g,'_');
+        const path = `uploads/${prop}/${y}/${m}/${day}/${uid}/${ts}_${cleanName}`;
+        const storageRef = ref(storage, path);
+        const task = uploadBytesResumable(storageRef, f, { contentType: f.type || 'image/jpeg' });
+
+        await new Promise((resolve) => {
+          task.on('state_changed', (snap)=>{
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            const bar = document.getElementById(`prog-${i}`);
+            if (bar) bar.style.width = pct + '%';
+          }, async (err)=>{
+            console.error('Upload error', err);
+            fail++; resolve();
+          }, async ()=>{
+            try {
+              const url = await getDownloadURL(task.snapshot.ref);
+              await addDoc(collection(db,'uploads'), {
+                propertyId: prop,
+                uploaderUid: uid,
+                uploaderName: uploaderName || null,
+                dateISO: `${y}-${m}-${day}`,
+                storagePath: path,
+                downloadURL: url,
+                damage: isDamage,
+                damageNotes: damageNotes || null,
+                createdAt: serverTimestamp()
+              });
+              ok++;
+            } catch (e){
+              console.error('Metadata save failed', e);
+              fail++;
+            }
+            resolve();
+          });
+        });
+      }
+
+      uploadBtn.disabled = false; resetBtn.disabled = false;
+      statusEl.innerHTML = `<span class="${fail? 'error':'success'}">Done: ${ok} uploaded${fail? ", "+fail+" failed":""}.</span>`;
+      if (!fail){ filesEl.value = ''; previewsEl.innerHTML = ''; damageFlagEl.checked = false; damageNotesEl.value = ''; }
+    });
+
+    // --- 8) Reset form ---
+    resetBtn.addEventListener('click', ()=>{
+      filesEl.value = '';
+      previewsEl.innerHTML = '';
+      damageFlagEl.checked = false;
+      damageNotesEl.value = '';
+      statusEl.textContent = '';
+    });
+  </script>
+</body>
+</html>
