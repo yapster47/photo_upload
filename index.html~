@@ -40,8 +40,8 @@
 <body>
   <div class="wrap">
     <div class="topbar">
-      <div class="brand">🧹 Photo  Uploader</div>
-      <div id="authState" class="pill">Sign In</div>
+      <div class="brand">🧹 STR Cleaner Uploader</div>
+      <div id="authState" class="pill">Not signed in</div>
     </div>
 
     <div class="card">
@@ -63,17 +63,17 @@
         </div>
         <div>
           <label for="uploaderName">Your name (will not be seen by owner)</label>
-          <input id="uploaderName" placeholder="e.g., Jenny"/>
+          <input id="uploaderName" placeholder="e.g., Sam"/>
         </div>
       </div>
 
       <label class="pill" style="justify-content:space-between">
-        <span>⚠️  There is damage to the property</span>
+        <span>⚠️  Check if reporting damage</span>
         <input id="damageFlag" type="checkbox" />
       </label>
 
       <label for="damageNotes">Notes (include damage description and/or any items that need to be purchased)</label>
-      <textarea id="damageNotes" placeholder="Broken lamp in master, stain on rug, etc. OR toilet paper needed"></textarea>
+      <textarea id="damageNotes" placeholder="Broken lamp in master, stain on rug, etc."></textarea>
 
       <label for="files">Photos</label>
       <input id="files" type="file" accept="image/*" multiple />
